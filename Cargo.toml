@@ -1,0 +1,24 @@
+[package]
+name = "opendeck-strongswan"
+version = "0.1.0"
+authors = ["Stephane Jourdois <stephane@jourdois.fr>"]
+license = "GPL-3.0-or-later"
+edition = "2024"
+
+[dependencies]
+futures-util = "0.3.34"
+log = "0.4.34"
+openaction = "2.7.0"
+rsvici = "0.1.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+simplelog = "0.12.2"
+time = { version = "0.3.55", features = ["macros"] }
+tokio = { version = "1.53.1", features = ["full"] }
+
+[[bin]]
+name = "opendeck-strongswan"
+path = "src/main.rs"
+
+[dev-dependencies]
+serde_vici = "0.1.5"

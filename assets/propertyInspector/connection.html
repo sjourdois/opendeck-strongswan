@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<script>
+			function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+				const websocket = new WebSocket("ws://localhost:" + inPort);
+				inActionInfo = JSON.parse(inActionInfo);
+				const context = inActionInfo.context;
+				const action = inActionInfo.action;
+				let connection = (typeof inActionInfo.payload.settings.connection === "string") ? inActionInfo.payload.settings.connection : "";
+				let connections = [];
+				let pairs = [];
+				let reachable = true;
+
+				websocket.onopen = () => {
+					websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+				};
+
+				const select = document.getElementById("connection");
+				const rivalsBox = document.getElementById("rivals");
+				const status = document.getElementById("status");
+
+				const rivalsOf = (name) => pairs
+					.filter(([a, b]) => a === name || b === name)
+					.map(([a, b]) => (a === name ? b : a));
+
+				const save = () => {
+					websocket.send(JSON.stringify({
+						event: "setSettings",
+						context: context,
+						payload: { connection: connection === "" ? null : connection },
+					}));
+				};
+
+				const sendRivals = (rivals) => {
+					websocket.send(JSON.stringify({
+						event: "sendToPlugin",
+						action: action,
+						context: context,
+						payload: { event: "setRivals", connection: connection, rivals: rivals },
+					}));
+				};
+
+				const render = () => {
+					select.innerHTML = "";
+					select.appendChild(new Option("— choose a connection —", ""));
+					for (const name of connections) select.appendChild(new Option(name, name));
+					if (connection !== "" && !connections.includes(connection)) {
+						select.appendChild(new Option(connection + " (not loaded)", connection));
+					}
+					select.value = connection;
+
+					status.textContent = reachable ? "" : "charon is not reachable on /run/charon.vici.";
+					status.style.display = reachable ? "none" : "";
+
+					rivalsBox.innerHTML = "";
+					const rivals = rivalsOf(connection);
+					const others = connections.filter((n) => n !== connection);
+					for (const r of rivals) if (!others.includes(r)) others.push(r);
+					if (connection === "" || others.length === 0) {
+						const empty = document.createElement("div");
+						empty.className = "dev-empty";
+						empty.textContent = connection === "" ? "Choose a connection first." : "No other connection.";
+						rivalsBox.appendChild(empty);
+						return;
+					}
+					for (const name of others) {
+						const row = document.createElement("div");
+						row.className = "label-row";
+						const box = document.createElement("input");
+						box.type = "checkbox";
+						box.id = "rival-" + name;
+						box.checked = rivals.includes(name);
+						box.addEventListener("change", () => {
+							const next = others.filter((n) => document.getElementById("rival-" + n).checked);
+							sendRivals(next);
+						});
+						const label = document.createElement("label");
+						label.htmlFor = box.id;
+						label.className = "cap";
+						label.textContent = connections.includes(name) ? name : name + " (not loaded)";
+						row.appendChild(box);
+						row.appendChild(label);
+						rivalsBox.appendChild(row);
+					}
+				};
+
+				select.addEventListener("change", () => {
+					connection = select.value;
+					save();
+					render();
+				});
+				render();
+
+				websocket.onmessage = (event) => {
+					const data = JSON.parse(event.data);
+					if (data.event == "sendToPropertyInspector" && data.payload && data.payload.event == "state") {
+						connections = data.payload.connections ?? [];
+						pairs = data.payload.exclusive ?? [];
+						reachable = data.payload.reachable ?? true;
+						render();
+					} else if (data.event == "didReceiveGlobalSettings" && data.payload && data.payload.settings) {
+						pairs = data.payload.settings.exclusive ?? [];
+						render();
+					}
+				};
+			}
+		</script>
+		<link rel="stylesheet" href="sdpi.css" />
+	</head>
+	<body>
+		<div class="sdpi-wrapper">
+			<div class="action-title">VPN Connection</div>
+			<div class="action-desc">Press to connect the connection, press again to disconnect it. A press while it is still connecting cancels.</div>
+			<div class="sdpi-item">
+				<div class="sdpi-item-label">Connection</div>
+				<select id="connection" class="sdpi-item-value select">
+					<option value="">— choose a connection —</option>
+				</select>
+			</div>
+			<div id="status" class="action-desc" style="display: none"></div>
+			<div class="sdpi-item">
+				<div class="sdpi-item-label">Exclusive with</div>
+				<div class="sdpi-item-value" id="rivals"></div>
+			</div>
+			<div class="action-desc">Connecting this connection first disconnects the ones ticked here. The relation goes both ways and is shared by every key: ticking work2 on the work1 key ticks work1 on the work2 key.</div>
+		</div>
+	</body>
+</html>

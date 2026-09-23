@@ -1,0 +1,43 @@
+{
+	"Name": "strongSwan VPN",
+	"Description": "Connect and disconnect strongSwan (swanctl) VPN connections from OpenDeck, over charon's VICI socket.",
+	"Author": "Stephane Jourdois",
+	"Version": "0.1.0",
+	"CodePaths": {
+		"x86_64-unknown-linux-gnu": "x86_64-unknown-linux-gnu/bin/opendeck-strongswan",
+		"aarch64-unknown-linux-gnu": "aarch64-unknown-linux-gnu/bin/opendeck-strongswan"
+	},
+	"CodePathLin": "x86_64-unknown-linux-gnu/bin/opendeck-strongswan",
+	"Icon": "icons/plugin",
+	"Category": "strongSwan VPN",
+	"OS": [
+		{
+			"Platform": "linux"
+		}
+	],
+	"Actions": [
+		{
+			"Icon": "icons/connection",
+			"Name": "VPN Connection",
+			"States": [
+				{ "Name": "Disconnected", "Image": "icons/vpnDown", "TitleAlignment": "bottom" },
+				{ "Name": "Connected", "Image": "icons/vpnUp", "TitleAlignment": "bottom" },
+				{ "Name": "Connecting", "Image": "icons/vpnBusy", "TitleAlignment": "bottom" },
+				{ "Name": "Unavailable", "Image": "icons/vpnUnavailable", "TitleAlignment": "bottom" }
+			],
+			"DisableAutomaticStates": true,
+			"Controllers": ["Keypad", "Encoder"],
+			"SupportedInMultiActions": true,
+			"Tooltip": "Connect or disconnect a strongSwan connection",
+			"Encoder": {
+				"layout": "$X1",
+				"TriggerDescription": {
+					"Push": "Connect / disconnect",
+					"Touch": "Connect / disconnect"
+				}
+			},
+			"UUID": "fr.jourdois.strongswan.connection",
+			"PropertyInspectorPath": "propertyInspector/connection.html"
+		}
+	]
+}

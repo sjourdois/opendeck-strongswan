@@ -145,13 +145,13 @@ struct ControlLog {
 	msg: String,
 }
 
-/// Run a command that streams `control-log` events, copying them to the log.
+/// Run a command that streams `control-log` events, copying them to the debug log.
 async fn logged<T: Serialize>(cmd: &str, conn: &str, request: T) -> Result<(), rsvici::Error> {
 	let mut client = connect().await?;
 	let stream = client.stream_request::<T, ControlLog>(cmd, "control-log", request);
 	pin_mut!(stream);
 	while let Some(line) = stream.try_next().await? {
-		log::info!("{conn}: {}", line.msg);
+		log::debug!("{conn}: {}", line.msg);
 	}
 	Ok(())
 }

@@ -33,7 +33,8 @@ them, it never draws over them:
 A press on a disconnected connection brings up every CHILD_SA it defines; a
 press on a connected one — or one still connecting, which cancels it — tears its
 IKE_SA down. When a connect or disconnect fails, the key shows OpenDeck's alert
-and the plugin log says why, charon's own messages included. Picking a
+and the plugin log carries charon's error message; its step-by-step messages
+are logged at debug level only. Picking a
 connection in the property inspector titles the key after it; rename it in
 OpenDeck afterwards and the title stays yours.
 

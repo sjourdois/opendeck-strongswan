@@ -6,10 +6,11 @@
 
 mod actions;
 mod exclusive;
+mod render;
 mod vici;
 mod vpn;
 
-use actions::connection::{self, Bindings, ConnectionAction};
+use actions::connection::{self, ConnectionAction, Keys};
 use openaction::global_events::*;
 use openaction::*;
 
@@ -70,12 +71,12 @@ async fn main() -> OpenActionResult<()> {
 	}
 
 	let vpn = Vpn::default();
-	let bindings = Bindings::default();
+	let keys = Keys::default();
 
 	set_global_event_handler(Box::leak(Box::new(Global { vpn: vpn.clone() })));
 	register_action(ConnectionAction {
 		vpn: vpn.clone(),
-		bindings: bindings.clone(),
+		keys: keys.clone(),
 	})
 	.await;
 
@@ -85,7 +86,7 @@ async fn main() -> OpenActionResult<()> {
 		tokio::spawn(async move {
 			let mut changes = vpn.subscribe();
 			while changes.changed().await.is_ok() {
-				connection::refresh_all(&vpn, &bindings).await;
+				connection::refresh_all(&vpn, &keys).await;
 			}
 		});
 	}

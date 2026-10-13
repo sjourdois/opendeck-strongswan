@@ -19,24 +19,26 @@ over its VICI socket through [`rsvici`](https://crates.io/crates/rsvici).
 |--------|-------------|--------------|
 | **VPN Connection** | Keypad · Encoder | Connect or disconnect one strongSwan connection |
 
-The key shows one of four states, each an ordinary OpenDeck state whose image
-and title you can change in OpenDeck's editor — the plugin only switches between
-them, it never draws over them:
+The plugin draws the key: a globe over the connection's name, in a colour you
+pick in the property inspector (green by default), with a label of your own
+in place of the name if you like. The globe tells the connection's state:
 
-| State | When |
+| Globe | When |
 |-------|------|
-| **Disconnected** | the connection has no SA |
-| **Connected** | its IKE_SA is established with a CHILD_SA installed |
-| **Connecting** | an SA is being negotiated or deleted, from this plugin or from anywhere else (`swanctl`, a status-bar menu, DPD) |
-| **Unavailable** | charon isn't reachable, or the connection isn't loaded |
+| **Dimmed outline** | disconnected: the connection has no SA |
+| **Filled** | connected: its IKE_SA is established with a CHILD_SA installed |
+| **Dashed outline** | an SA is being negotiated or deleted, from this plugin or from anywhere else (`swanctl`, a status-bar menu, DPD) |
+| **Grey, struck through** | unavailable: charon isn't reachable, or the connection isn't loaded |
+
+Since the plugin draws it, a key's image is the plugin's, not OpenDeck's: an
+image picked in OpenDeck's editor is replaced at the next redraw. OpenDeck's
+title is left empty and yours to use, but it would sit over the label.
 
 A press on a disconnected connection brings up every CHILD_SA it defines; a
 press on a connected one — or one still connecting, which cancels it — tears its
 IKE_SA down. When a connect or disconnect fails, the key shows OpenDeck's alert
 and the plugin log carries charon's error message; its step-by-step messages
-are logged at debug level only. Picking a
-connection in the property inspector titles the key after it; rename it in
-OpenDeck afterwards and the title stays yours.
+are logged at debug level only.
 
 ### Exclusive connections
 

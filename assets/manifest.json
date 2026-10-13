@@ -19,13 +19,7 @@
 		{
 			"Icon": "icons/connection",
 			"Name": "VPN Connection",
-			"States": [
-				{ "Name": "Disconnected", "Image": "icons/vpnDown", "TitleAlignment": "bottom" },
-				{ "Name": "Connected", "Image": "icons/vpnUp", "TitleAlignment": "bottom" },
-				{ "Name": "Connecting", "Image": "icons/vpnBusy", "TitleAlignment": "bottom" },
-				{ "Name": "Unavailable", "Image": "icons/vpnUnavailable", "TitleAlignment": "bottom" }
-			],
-			"DisableAutomaticStates": true,
+			"States": [{ "Image": "icons/connection" }],
 			"Controllers": ["Keypad", "Encoder"],
 			"SupportedInMultiActions": true,
 			"Tooltip": "Connect or disconnect a strongSwan connection",

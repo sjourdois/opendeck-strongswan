@@ -11,9 +11,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **VPN Connection** action (Keypad · Encoder): connect or disconnect one
-  strongSwan connection over charon's VICI socket, with four OpenDeck states —
-  Disconnected, Connected, Connecting, Unavailable — kept live from charon's
-  events.
+  strongSwan connection over charon's VICI socket. The key is a globe in a
+  colour of your choice over the connection's name or a label of yours, and
+  shows the connection's state — disconnected, connected, connecting,
+  unavailable — kept live from charon's events.
 - **Exclusive connections**: pairs of connections, kept in the plugin's global
   settings, where connecting one first disconnects the other.
 - `--status` prints the connections and their state as the plugin sees them.

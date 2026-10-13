@@ -8,7 +8,8 @@
 				inActionInfo = JSON.parse(inActionInfo);
 				const context = inActionInfo.context;
 				const action = inActionInfo.action;
-				let connection = (typeof inActionInfo.payload.settings.connection === "string") ? inActionInfo.payload.settings.connection : "";
+				const settings = inActionInfo.payload.settings;
+				let connection = (typeof settings.connection === "string") ? settings.connection : "";
 				let connections = [];
 				let pairs = [];
 				let reachable = true;
@@ -20,6 +21,19 @@
 				const select = document.getElementById("connection");
 				const rivalsBox = document.getElementById("rivals");
 				const status = document.getElementById("status");
+				const useName = document.getElementById("useName");
+				const labelInput = document.getElementById("label");
+				const colorInput = document.getElementById("color");
+
+				let customLabel = (typeof settings.label === "string") ? settings.label : "";
+				// Checked (no saved string) = the connection's name; unchecked = the
+				// custom label verbatim, even when it is empty (no label).
+				useName.checked = typeof settings.label !== "string";
+				colorInput.value = (typeof settings.color === "string") ? settings.color : "#2ea44f";
+				const syncLabel = () => {
+					labelInput.disabled = useName.checked;
+					labelInput.value = useName.checked ? connection : customLabel;
+				};
 
 				const rivalsOf = (name) => pairs
 					.filter(([a, b]) => a === name || b === name)
@@ -29,7 +43,11 @@
 					websocket.send(JSON.stringify({
 						event: "setSettings",
 						context: context,
-						payload: { connection: connection === "" ? null : connection },
+						payload: {
+							connection: connection === "" ? null : connection,
+							label: useName.checked ? null : customLabel,
+							color: colorInput.value,
+						},
 					}));
 				};
 
@@ -88,9 +106,14 @@
 
 				select.addEventListener("change", () => {
 					connection = select.value;
+					syncLabel();
 					save();
 					render();
 				});
+				labelInput.addEventListener("input", () => { customLabel = labelInput.value; save(); });
+				useName.addEventListener("change", () => { syncLabel(); save(); });
+				colorInput.addEventListener("change", save);
+				syncLabel();
 				render();
 
 				websocket.onmessage = (event) => {
@@ -120,6 +143,18 @@
 				</select>
 			</div>
 			<div id="status" class="action-desc" style="display: none"></div>
+			<div class="sdpi-item">
+				<div class="sdpi-item-label">Label</div>
+				<div class="sdpi-item-value label-row">
+					<input id="useName" type="checkbox" />
+					<label for="useName" class="cap">Connection name</label>
+					<input id="label" type="text" placeholder="Custom label" />
+				</div>
+			</div>
+			<div class="sdpi-item">
+				<div class="sdpi-item-label">Colour</div>
+				<input id="color" class="sdpi-item-value" type="color" value="#2ea44f" />
+			</div>
 			<div class="sdpi-item">
 				<div class="sdpi-item-label">Exclusive with</div>
 				<div class="sdpi-item-value" id="rivals"></div>

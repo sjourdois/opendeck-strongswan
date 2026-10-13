@@ -1,78 +1,103 @@
 //! Connection action: one key per strongSwan connection, pressed to bring it up
 //! or down.
 //!
-//! The key's look is one of four manifest states, so each stays editable in
-//! OpenDeck like any key image: nothing here pushes an image. A press on a
-//! connection that is down connects it, after disconnecting the connections it
-//! is exclusive with (see [`crate::exclusive`]); a press on one that is up, or
-//! still negotiating, disconnects it. A failure shows OpenDeck's alert on the key
-//! and its reason in the plugin log.
+//! The plugin draws the key (see [`crate::render`]): a globe in the colour set
+//! in the property inspector, over the connection's name or a label of the
+//! user's. A press on a connection that is down connects it, after disconnecting
+//! the connections it is exclusive with (see [`crate::exclusive`]); a press on
+//! one that is up, or still negotiating, disconnects it. A failure shows
+//! OpenDeck's alert on the key and its reason in the plugin log.
 
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use openaction::*;
 use serde::{Deserialize, Serialize};
 
 use crate::exclusive;
+use crate::render;
 use crate::vici::{self, Conn, Status};
 use crate::vpn::{self, Shown, Snapshot, Vpn};
-
-/// Manifest state indices, in the order of `States` in `manifest.json`.
-const STATE_DOWN: u16 = 0;
-const STATE_UP: u16 = 1;
-const STATE_BUSY: u16 = 2;
-const STATE_UNAVAILABLE: u16 = 3;
-
-fn state_for(shown: Shown) -> u16 {
-	match shown {
-		Shown::Down => STATE_DOWN,
-		Shown::Up => STATE_UP,
-		Shown::Busy => STATE_BUSY,
-		Shown::Unavailable => STATE_UNAVAILABLE,
-	}
-}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct ConnectionSettings {
 	/// The connection's name, as `swanctl --list-conns` prints it.
 	pub connection: Option<String>,
+	/// Text under the globe. `None` = the connection's name; an empty string
+	/// leaves the key without a label.
+	pub label: Option<String>,
+	/// The globe's colour, `#rrggbb`. `None` = [`render::DEFAULT_COLOR`].
+	pub color: Option<String>,
 }
 
 impl ConnectionSettings {
 	pub fn name(&self) -> Option<&str> {
 		self.connection.as_deref().filter(|s| !s.is_empty())
 	}
+
+	fn label(&self) -> &str {
+		self.label.as_deref().or(self.name()).unwrap_or_default()
+	}
+
+	fn image(&self, snapshot: &Snapshot) -> String {
+		render::key(
+			snapshot.shown(self.name()),
+			render::color(self.color.as_deref()),
+			self.label(),
+		)
+	}
 }
 
-/// Each visible instance's connection. The openaction runtime keeps an
-/// instance's settings to itself, and redraws on a charon event need them.
-#[derive(Clone, Default)]
-pub struct Bindings(Arc<Mutex<HashMap<String, Option<String>>>>);
+/// A visible instance's settings, and the image last pushed to it.
+struct Key {
+	settings: ConnectionSettings,
+	drawn: Option<String>,
+}
 
-impl Bindings {
-	/// Bind an instance, returning its previous binding if it had one.
-	fn set(&self, instance_id: &str, name: Option<&str>) -> Option<Option<String>> {
-		self.0
-			.lock()
-			.unwrap()
-			.insert(instance_id.to_owned(), name.map(str::to_owned))
+/// Every visible instance. The openaction runtime keeps an instance's settings
+/// to itself, and redraws on a charon event need them.
+#[derive(Clone, Default)]
+pub struct Keys(Arc<Mutex<HashMap<String, Key>>>);
+
+impl Keys {
+	fn set(&self, instance_id: &str, settings: &ConnectionSettings) {
+		let mut keys = self.0.lock().unwrap();
+		let key = keys.entry(instance_id.to_owned()).or_insert(Key {
+			settings: settings.clone(),
+			drawn: None,
+		});
+		key.settings = settings.clone();
 	}
 
 	fn forget(&self, instance_id: &str) {
 		self.0.lock().unwrap().remove(instance_id);
 	}
 
-	fn get(&self, instance_id: &str) -> Option<String> {
-		self.0.lock().unwrap().get(instance_id).cloned().flatten()
+	/// The image `instance_id` should show now, unless it already does; the
+	/// image is recorded as drawn.
+	fn redraw(&self, instance_id: &str, snapshot: &Snapshot) -> Option<String> {
+		let mut keys = self.0.lock().unwrap();
+		let key = keys.get_mut(instance_id)?;
+		let image = key.settings.image(snapshot);
+		if key.drawn.as_ref() == Some(&image) {
+			return None;
+		}
+		key.drawn = Some(image.clone());
+		Some(image)
+	}
+
+	/// Forget what was drawn on `instance_id`, so the next redraw pushes again.
+	fn undrawn(&self, instance_id: &str) {
+		if let Some(key) = self.0.lock().unwrap().get_mut(instance_id) {
+			key.drawn = None;
+		}
 	}
 }
 
 pub struct ConnectionAction {
 	pub vpn: Vpn,
-	pub bindings: Bindings,
+	pub keys: Keys,
 }
 
 /// What the property inspector is told: the connections to pick from and the
@@ -105,8 +130,8 @@ impl Action for ConnectionAction {
 		instance: &Instance,
 		settings: &Self::Settings,
 	) -> OpenActionResult<()> {
-		self.bindings.set(&instance.instance_id, settings.name());
-		show(instance, &self.vpn.snapshot(), settings.name()).await
+		self.keys.set(&instance.instance_id, settings);
+		show(instance, &self.keys, &self.vpn.snapshot()).await
 	}
 
 	async fn will_disappear(
@@ -114,7 +139,7 @@ impl Action for ConnectionAction {
 		instance: &Instance,
 		_settings: &Self::Settings,
 	) -> OpenActionResult<()> {
-		self.bindings.forget(&instance.instance_id);
+		self.keys.forget(&instance.instance_id);
 		Ok(())
 	}
 
@@ -123,15 +148,8 @@ impl Action for ConnectionAction {
 		instance: &Instance,
 		settings: &Self::Settings,
 	) -> OpenActionResult<()> {
-		let before = self.bindings.set(&instance.instance_id, settings.name());
-		// Picking another connection titles the key after it. Only then: the
-		// title is OpenDeck's to edit, and a rename there must stick.
-		if let (Some(before), Some(name)) = (before, settings.name())
-			&& before.as_deref() != Some(name)
-		{
-			instance.set_title(Some(name), None).await?;
-		}
-		show(instance, &self.vpn.snapshot(), settings.name()).await
+		self.keys.set(&instance.instance_id, settings);
+		show(instance, &self.keys, &self.vpn.snapshot()).await
 	}
 
 	async fn key_down(
@@ -237,31 +255,28 @@ impl ConnectionAction {
 	}
 }
 
-/// Push the state matching the connection, unless the key already shows it:
-/// every `setState` makes OpenDeck write the profile out again. Nothing is
+/// Push the image matching the connection, unless the key already shows it:
+/// every `setImage` makes OpenDeck write the profile out again. Nothing is
 /// pushed before the monitor has first heard from charon.
-async fn show(
-	instance: &Instance,
-	snapshot: &Snapshot,
-	name: Option<&str>,
-) -> OpenActionResult<()> {
+async fn show(instance: &Instance, keys: &Keys, snapshot: &Snapshot) -> OpenActionResult<()> {
 	if !snapshot.settled {
 		return Ok(());
 	}
-	let state = state_for(snapshot.shown(name));
-	if instance.current_state_index.load(Ordering::Relaxed) != state {
-		instance.set_state(state).await?;
-		instance.current_state_index.store(state, Ordering::Relaxed);
+	let Some(image) = keys.redraw(&instance.instance_id, snapshot) else {
+		return Ok(());
+	};
+	let result = instance.set_image(Some(image), None).await;
+	if result.is_err() {
+		keys.undrawn(&instance.instance_id);
 	}
-	Ok(())
+	result
 }
 
 /// Redraw every visible key from the latest snapshot.
-pub async fn refresh_all(vpn: &Vpn, bindings: &Bindings) {
+pub async fn refresh_all(vpn: &Vpn, keys: &Keys) {
 	let snapshot = vpn.snapshot();
 	for instance in visible_instances(ConnectionAction::UUID).await {
-		let name = bindings.get(&instance.instance_id);
-		if let Err(error) = show(&instance, &snapshot, name.as_deref()).await {
+		if let Err(error) = show(&instance, keys, &snapshot).await {
 			log::warn!("could not update {}: {error}", instance.instance_id);
 		}
 	}
@@ -346,6 +361,24 @@ mod tests {
 		assert_eq!(s.name(), None);
 		let s: ConnectionSettings = serde_json::from_str("{}").unwrap();
 		assert_eq!(s.name(), None);
+		assert_eq!(s.label(), "");
+	}
+
+	#[test]
+	fn label_payload() {
+		let s: ConnectionSettings =
+			serde_json::from_str(r##"{"connection":"work1","label":null,"color":"#3b82f6"}"##)
+				.unwrap();
+		assert_eq!(s.label(), "work1");
+		assert_eq!(render::color(s.color.as_deref()), "#3b82f6");
+		let s: ConnectionSettings =
+			serde_json::from_str(r##"{"connection":"work1","label":"Travail","color":"#3b82f6"}"##)
+				.unwrap();
+		assert_eq!(s.label(), "Travail");
+		let s: ConnectionSettings =
+			serde_json::from_str(r##"{"connection":"work1","label":"","color":null}"##).unwrap();
+		assert_eq!(s.label(), "");
+		assert_eq!(render::color(s.color.as_deref()), render::DEFAULT_COLOR);
 	}
 
 	#[test]
